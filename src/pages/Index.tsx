@@ -1,16 +1,18 @@
 import { useState, useRef, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 
+const TRANSLATE_URL = 'https://functions.poehali.dev/995c01dd-766a-46de-9b29-85a35df44ead';
+
 const STEPS = [
   {
     n: '01',
     title: 'Загрузите файл игры',
-    text: 'Откройте папку с новеллой и найдите текстовые файлы сценария. Чаще всего это .rpy (Ren\'Py), .txt, .json или .ks. Перетащите их сюда.',
+    text: "Откройте папку с новеллой и найдите текстовые файлы сценария. Чаще всего это .rpy (Ren'Py), .txt, .json или .ks. Перетащите их сюда.",
   },
   {
     n: '02',
     title: 'Дождитесь перевода',
-    text: 'Локализатор распознаёт реплики персонажей и описания, сохраняя теги, имена и форматирование игры в неизменном виде.',
+    text: 'Локализатор переводит текст построчно, сохраняя пустые строки и структуру файла без изменений.',
   },
   {
     n: '03',
@@ -19,14 +21,56 @@ const STEPS = [
   },
 ];
 
+type Status = 'idle' | 'loading' | 'done' | 'error';
+
 const Index = () => {
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string>('');
   const [dragging, setDragging] = useState(false);
+  const [status, setStatus] = useState<Status>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File | null) => {
-    if (file) setFileName(file.name);
+    if (!file) return;
+    setStatus('idle');
+    setErrorMsg('');
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => setFileContent(String(e.target?.result ?? ''));
+    reader.readAsText(file);
   }, []);
+
+  const downloadFile = (content: string, name: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleTranslate = async () => {
+    if (!fileContent) return;
+    setStatus('loading');
+    setErrorMsg('');
+    try {
+      const res = await fetch(TRANSLATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: fileContent, target: 'ru', filename: fileName }),
+      });
+      if (!res.ok) throw new Error('Не удалось перевести файл');
+      const data = await res.json();
+      const baseName = (fileName ?? 'file.txt').replace(/(\.[^.]+)$/, '_ru$1');
+      downloadFile(data.translated, baseName);
+      setStatus('done');
+    } catch (err) {
+      setStatus('error');
+      setErrorMsg(err instanceof Error ? err.message : 'Произошла ошибка');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0d0d0f] text-neutral-100 font-sans antialiased selection:bg-amber-200/30">
@@ -55,15 +99,15 @@ const Index = () => {
             <span className="italic text-amber-100/90">на родной язык</span>
           </h1>
           <p className="mt-8 max-w-xl text-lg font-light leading-relaxed text-neutral-400">
-            Загрузите файлы сценария — локализатор аккуратно переведёт текст
-            и подскажет, как вернуть его обратно в игру. Без кода и настроек.
+            Загрузите файл сценария — локализатор переведёт текст
+            и сразу отдаст готовый файл для скачивания. Без кода и настроек.
           </p>
         </section>
 
         {/* Upload zone */}
         <section className="animate-fade-up pb-24" style={{ animationDelay: '160ms' }}>
           <div
-            onClick={() => inputRef.current?.click()}
+            onClick={() => status !== 'loading' && inputRef.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => {
@@ -107,6 +151,39 @@ const Index = () => {
               </>
             )}
           </div>
+
+          {/* Action */}
+          {fileName && (
+            <div className="mt-6 flex flex-col items-center gap-3 animate-fade-up">
+              <button
+                onClick={handleTranslate}
+                disabled={status === 'loading'}
+                className="group inline-flex items-center gap-2.5 rounded-full bg-amber-100 px-7 py-3.5 font-mono text-sm tracking-tight text-[#0d0d0f] transition-all duration-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {status === 'loading' ? (
+                  <>
+                    <Icon name="Loader2" size={17} className="animate-spin" />
+                    Переводим...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="Sparkles" size={17} />
+                    Перевести и скачать
+                  </>
+                )}
+              </button>
+              {status === 'done' && (
+                <p className="flex items-center gap-2 font-mono text-xs text-emerald-400/90">
+                  <Icon name="Check" size={14} /> Готово! Файл загружен на ваше устройство
+                </p>
+              )}
+              {status === 'error' && (
+                <p className="flex items-center gap-2 font-mono text-xs text-red-400/90">
+                  <Icon name="TriangleAlert" size={14} /> {errorMsg}
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Steps */}
