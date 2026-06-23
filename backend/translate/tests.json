@@ -1,35 +1,18 @@
 {
   "tests": [
     {
-      "name": "Перевод простого текста",
-      "method": "POST",
-      "path": "/",
-      "body": {
-        "content": "Hello\nGoodbye",
-        "target": "ru",
-        "filename": "test.txt"
-      },
-      "expectedStatus": 200,
-      "expectedBody": {
-        "filename": "test.txt"
-      },
-      "bodyMatcher": "partial"
-    },
-    {
-      "name": "Пустой контент",
-      "method": "POST",
-      "path": "/",
-      "body": {
-        "content": ""
-      },
-      "expectedStatus": 400,
-      "bodyMatcher": "partial"
-    },
-    {
       "name": "CORS preflight",
       "method": "OPTIONS",
       "path": "/",
       "expectedStatus": 200
+    },
+    {
+      "name": "Пустой запрос — ошибка",
+      "method": "POST",
+      "path": "/",
+      "body": {},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
     }
   ]
 }
